@@ -5,6 +5,7 @@
   <title>Random Number</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
+
     body {
       width: 100vw;
       height: 100vh;
@@ -14,6 +15,7 @@
       overflow: hidden;
       transition: background-color 0.3s;
     }
+
     #number {
       font-family: Arial Black, sans-serif;
       font-size: 80vmin;
@@ -22,6 +24,7 @@
       line-height: 1;
       user-select: none;
     }
+
     #other-btn {
       position: fixed;
       bottom: 20px;
@@ -40,23 +43,24 @@
     }
     #other-btn:hover { background: rgba(255,255,255,0.35); }
 
-    /* Video overlay */
     #overlay {
       display: none;
       position: fixed;
       inset: 0;
       background: black;
       z-index: 100;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
     }
-    #overlay.visible { display: flex; }
+    #overlay.visible { display: block; }
+
     #vid {
-      width: 100vw;
-      height: 100vh;
-      object-fit: contain;
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
     }
+
     #close-btn {
       position: fixed;
       bottom: 20px;
@@ -78,42 +82,49 @@
 </head>
 <body>
 
-<div id="number">1</div>
-<button id="other-btn" onclick="openVideo()">other thing</button>
+  <div id="number">1</div>
+  <button id="other-btn" onclick="openVideo()">other thing</button>
 
-<!-- Video overlay -->
-<div id="overlay">
-  <video id="vid" src="random_numbers_1hr.mp4" autoplay controls></video>
-  <button id="close-btn" onclick="closeVideo()">← go back</button>
-</div>
+  <div id="overlay">
+    <video id="vid" src="random_numbers_1hr.mp4" autoplay></video>
+    <button id="close-btn" onclick="closeVideo()">← go back</button>
+  </div>
 
 <script>
   const colors = { 1: '#8B0000', 2: '#006400', 3: '#00008B', 4: '#FF8C00' };
 
+  // Weighted next number: 1/11 same, 1/11 one before, 9/11 random
   function getNext(current) {
     const roll = Math.floor(Math.random() * 11) + 1;
-    if (roll === 1) return current;
-    if (roll === 2) return ((current - 2 + 4) % 4) + 1;
-    return Math.floor(Math.random() * 4) + 1;
+    if (roll === 1) return current;                       // same
+    if (roll === 2) return ((current - 2 + 4) % 4) + 1; // one before (wraps 1->4)
+    return Math.floor(Math.random() * 4) + 1;            // random 1-4
   }
 
   let current = Math.floor(Math.random() * 4) + 1;
+  let intervalId = null;
 
   function update() {
+    current = getNext(current);
     document.getElementById('number').textContent = current;
     document.body.style.backgroundColor = colors[current];
-    current = getNext(current);
   }
 
-  update();
-  setInterval(update, 9000);
+  // Set initial number and start loop at 1.7 seconds
+  document.getElementById('number').textContent = current;
+  document.body.style.backgroundColor = colors[current];
+  intervalId = setInterval(update, 1700);
 
   function openVideo() {
+    document.getElementById('number').style.display = 'none';
+    document.getElementById('other-btn').style.display = 'none';
     document.getElementById('overlay').classList.add('visible');
     document.getElementById('vid').play();
   }
 
   function closeVideo() {
+    document.getElementById('number').style.display = 'flex';
+    document.getElementById('other-btn').style.display = 'block';
     document.getElementById('overlay').classList.remove('visible');
     document.getElementById('vid').pause();
   }
