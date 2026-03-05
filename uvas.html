@@ -2,22 +2,29 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Random Number</title>
+  <title>uvas3</title>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
 
     body {
-      width: 100vw;
-      height: 100vh;
       display: flex;
       align-items: center;
       justify-content: center;
-      overflow: hidden;
-      transition: background-color 0.2s;
+      background-color: #8B0000;
     }
 
     #number {
-      font-family: Arial Black, sans-serif;
+      font-family: Arial Black, Impact, sans-serif;
       font-size: 80vmin;
       font-weight: 900;
       color: white;
@@ -25,70 +32,172 @@
       user-select: none;
     }
 
-    #other-btn {
+    /* Flash animation: number briefly goes invisible then comes back */
+    @keyframes flash {
+      0%   { opacity: 1; }
+      30%  { opacity: 0; }
+      60%  { opacity: 0; }
+      100% { opacity: 1; }
+    }
+
+    #number.flashing {
+      animation: flash 0.4s ease-in-out;
+    }
+
+    #btn {
       position: fixed;
       bottom: 20px;
       right: 20px;
       padding: 10px 18px;
-      background: rgba(255,255,255,0.2);
+      background: rgba(255, 255, 255, 0.2);
       color: white;
-      border: 2px solid rgba(255,255,255,0.5);
+      border: 2px solid rgba(255, 255, 255, 0.5);
       border-radius: 8px;
       font-size: 14px;
       font-family: Arial, sans-serif;
       cursor: pointer;
       backdrop-filter: blur(4px);
-      transition: background 0.2s;
+      -webkit-backdrop-filter: blur(4px);
       z-index: 10;
     }
-    #other-btn:hover { background: rgba(255,255,255,0.35); }
+    #btn:hover {
+      background: rgba(255, 255, 255, 0.35);
+    }
   </style>
 </head>
 <body>
-
   <div id="number">1</div>
-  <button id="other-btn" onclick="toggleSpeed()">other thing</button>
+  <button id="btn" onclick="toggleMode()">other thing</button>
 
-<script>
-  const colors = { 1: '#8B0000', 2: '#006400', 3: '#00008B', 4: '#FF8C00' };
+  <script>
+    const COLORS = {
+      1: '#8B0000',
+      2: '#006400',
+      3: '#00008B',
+      4: '#FF8C00'
+    };
+    const SLOW_S = 9.0;
+    const FAST_S = 1.7;
 
-  function getNext(current) {
-    const roll = Math.floor(Math.random() * 11) + 1;
-    if (roll === 1) return current;                       // 1/11 same
-    if (roll === 2) return ((current - 2 + 4) % 4) + 1; // 1/11 one before
-    return Math.floor(Math.random() * 4) + 1;            // 9/11 random
-  }
+    let current = Math.floor(Math.random() * 4) + 1;
+    let fastMode = false;
+    let intervalSec = SLOW_S;
 
-  let current = Math.floor(Math.random() * 4) + 1;
-  let fastMode = false;
-  let intervalId = null;
+    let audioCtx = null;
+    let nextEventTime = 0;
+    let lookaheadId = null;
 
-  function update() {
-    current = getNext(current);
-    document.getElementById('number').textContent = current;
-    document.body.style.backgroundColor = colors[current];
-  }
+    const numEl = document.getElementById('number');
+    const btnEl = document.getElementById('btn');
 
-  function startTimer(ms) {
-    if (intervalId) clearInterval(intervalId);
-    intervalId = setInterval(update, ms);
-  }
-
-  function toggleSpeed() {
-    fastMode = !fastMode;
-    if (fastMode) {
-      document.getElementById('other-btn').textContent = '← go back';
-      startTimer(1700); // other thing: 1.7 seconds
-    } else {
-      document.getElementById('other-btn').textContent = 'other thing';
-      startTimer(9000); // normal: 9 seconds
+    // 1/11 same, 1/11 one before, 9/11 random
+    function getNext(cur) {
+      const roll = Math.floor(Math.random() * 11);
+      if (roll === 0) return cur;
+      if (roll === 1) return ((cur - 2 + 4) % 4) + 1;
+      return Math.floor(Math.random() * 4) + 1;
     }
-  }
 
-  // Init at 9 seconds
-  document.getElementById('number').textContent = current;
-  document.body.style.backgroundColor = colors[current];
-  startTimer(9000);
-</script>
+    function display(n, same) {
+      numEl.textContent = n;
+      document.body.style.backgroundColor = COLORS[n];
+
+      if (same) {
+        // Remove class first so animation restarts if already flashing
+        numEl.classList.remove('flashing');
+        // Force reflow so the browser registers the removal
+        void numEl.offsetWidth;
+        numEl.classList.add('flashing');
+        // Remove class after animation completes so it can fire again next time
+        numEl.addEventListener('animationend', () => {
+          numEl.classList.remove('flashing');
+        }, { once: true });
+      }
+    }
+
+    const LOOKAHEAD = 0.1;
+
+    function scheduler() {
+      while (audioCtx && nextEventTime < audioCtx.currentTime + LOOKAHEAD) {
+        const next = getNext(current);
+        const isSame = next === current;
+        current = next;
+
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        gain.gain.setValueAtTime(0, audioCtx.currentTime);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(nextEventTime);
+        osc.stop(nextEventTime + 0.001);
+
+        // Capture for closure
+        const capturedNum = current;
+        const capturedSame = isSame;
+        osc.onended = () => {
+          display(capturedNum, capturedSame);
+        };
+
+        nextEventTime += intervalSec;
+      }
+      lookaheadId = requestAnimationFrame(scheduler);
+    }
+
+    function startTimer(sec) {
+      intervalSec = sec;
+
+      if (lookaheadId !== null) {
+        cancelAnimationFrame(lookaheadId);
+        lookaheadId = null;
+      }
+
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+
+      nextEventTime = audioCtx.currentTime + sec;
+      lookaheadId = requestAnimationFrame(scheduler);
+    }
+
+    function toggleMode() {
+      fastMode = !fastMode;
+      if (fastMode) {
+        btnEl.textContent = '← go back';
+        startTimer(FAST_S);
+      } else {
+        btnEl.textContent = 'other thing';
+        startTimer(SLOW_S);
+      }
+    }
+
+    document.addEventListener('click', () => {
+      if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    });
+
+    // Drift-corrected fallback before AudioContext starts
+    let fallbackExpected = performance.now() + SLOW_S * 1000;
+    let fallbackId = null;
+
+    function fallbackTick() {
+      if (audioCtx && audioCtx.state === 'running') {
+        clearTimeout(fallbackId);
+        return;
+      }
+      const next = getNext(current);
+      const isSame = next === current;
+      current = next;
+      display(current, isSame);
+
+      const drift = performance.now() - fallbackExpected;
+      fallbackExpected += SLOW_S * 1000;
+      fallbackId = setTimeout(fallbackTick, Math.max(0, SLOW_S * 1000 - drift));
+    }
+
+    // Init
+    display(current, false);
+    fallbackId = setTimeout(fallbackTick, SLOW_S * 1000);
+  </script>
 </body>
-</html>
